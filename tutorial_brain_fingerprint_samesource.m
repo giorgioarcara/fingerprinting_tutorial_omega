@@ -231,6 +231,7 @@ for iSubj=1:nSubjects
         % transform head model to constrained version
         constrained = bst_gain_orient(HeadModel.Gain, HeadModel.GridOrient);
 
+        % here the source data (of Ref Subject) are back projected as sensor data through the Gain Matrix.
         NewRawData = constrained * source;
 
         RawData.F = NewRawData;
