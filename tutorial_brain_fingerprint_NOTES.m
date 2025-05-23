@@ -1,4 +1,4 @@
-function tutorial_brain_fingerprint_randomhead(ProtocolNameOmega, reports_dir)
+Gfunction tutorial_brain_fingerprint_randomhead(ProtocolNameOmega, reports_dir)
 % TUTORIAL_BRAIN_FINGERPRINT: Script that reproduces the results of the online tutorial "Brain-fingerprint".
 %
 % CORRESPONDING ONLINE TUTORIAL:

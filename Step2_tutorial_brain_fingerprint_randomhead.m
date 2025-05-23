@@ -1,4 +1,4 @@
-function tutorial_brain_fingerprint_samehead(ProtocolNameOmega, reports_dir)
+function tutorial_brain_fingerprint_randomhead(ProtocolNameOmega, reports_dir)
 % TUTORIAL_BRAIN_FINGERPRINT: Script that reproduces the results of the online tutorial "Brain-fingerprint".
 %
 % CORRESPONDING ONLINE TUTORIAL:
@@ -30,6 +30,7 @@ function tutorial_brain_fingerprint_samehead(ProtocolNameOmega, reports_dir)
 % Authors of modifications: Giorgio Arcara, Sara Lago, Daniele Marinazzo,
 % 2024
 
+
 %% ===== CHECK PROTOCOL =====
 % Start brainstorm without the GUI
 if ~brainstorm('status')
@@ -45,17 +46,20 @@ if (nargin < 1) || isempty(ProtocolNameOmega)
 end
 
 
-%% ===== REPLACE HEAD MODEL WITH SAME HEAD MODEL =====
+%% ===== REPLACE HEAD MODEL WITH RANDOM HEAD MODEL =====
 % Subjects
 SubjectNames = {'sub-0002', 'sub-0003', 'sub-0004', 'sub-0006', 'sub-0007'};
 nSubjects = length(SubjectNames);
 
-% Process: Select data files in: */*
+%% Mod start here.
+% 1) select files and create new head model for all subjects
+% 2) replace data from one head model in the other files.
+% 3) calculate sources (adding comment)
+
+% Process: Select data files in: */
 
 % create new head model (to avoid modify the original ones of the OMEGA
-% tutorial). The Brainstorm head model file will be used as template in
-% which the Gain Matrix will be substituted with that of a Reference
-% Subject that will be the Same for all Subjects.
+% tutorial).
 
 for iSubj=1:nSubjects
 
@@ -69,7 +73,7 @@ for iSubj=1:nSubjects
 
     % Process: Compute head model
     RawFileHead = bst_process('CallProcess', 'process_headmodel', RawFile, [], ...
-        'Comment',     'Overlapping spheres same head', ...
+        'Comment',     'Overlapping spheres random head', ...
         'sourcespace', 1, ...  % Cortex surface
         'meg',         3, ...  % Overlapping spheres
         'eeg',         3, ...  % OpenMEEG BEM
@@ -87,13 +91,17 @@ for iSubj=1:nSubjects
         'channelfile', '');
 end;
 
-% define the index of the reference Subject, whose head model will be used for all
-% Subjects
-refSubj = 1;
+% create a random permutation of participants.
+rng(42, 'twister') % please comment this line to make a real random permutation.
+% note that with random permutation it could be that a Subject is assigned
+% with their own Head model. With the hard-coded seed (42), each participant
+% is assigned with a different head model.
 
-% the head model of the i-th Subject in SubjectNames, will be substituted
-% with the head model of the reference Subject
+Perm = randperm(nSubjects, nSubjects);
+SubjectNamesPerm = SubjectNames(Perm);
 
+% the head_model of the i-th Subject in SubjectNames, will be substituted
+% with the head model of the i-th Subject in SubjectNamesPerm
 for iSubj=1:nSubjects
 
     RawFileHead = bst_process('CallProcess', 'process_select_files_data', [], [], ...
@@ -104,8 +112,8 @@ for iSubj=1:nSubjects
         'includeintra',  0, ...
         'includecommon', 0);
 
-    RawFileHeadSame = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{refSubj}, ...
+    RawFileHeadPerm = bst_process('CallProcess', 'process_select_files_data', [], [], ...
+        'subjectname',   SubjectNamesPerm{iSubj}, ...
         'condition',     '', ...
         'tag',           '', ...
         'includebad',    0, ...
@@ -116,19 +124,19 @@ for iSubj=1:nSubjects
     HeadModel=in_bst_headmodel(HeadModelFile.FileName);
 
 
-    HeadModelFileSame = bst_get('HeadModelForStudy',   RawFileHeadSame.iStudy);
-    HeadModelSame=in_bst_headmodel(HeadModelFileSame.FileName);
+    HeadModelFilePerm = bst_get('HeadModelForStudy',   RawFileHeadPerm.iStudy);
+    HeadModelPerm=in_bst_headmodel(HeadModelFilePerm.FileName);
 
     % in the line below the Gain of the Head model is changed with that of
     % the reference Subject.
-    HeadModel.Gain = HeadModelSame.Gain;
-    HeadModel.SubjSame = SubjectNames{refSubj};
+    HeadModel.Gain = HeadModelPerm.Gain;
+    HeadModel.SubjPerm = SubjectNamesPerm{iSubj};
     bst_save(file_fullpath(HeadModelFile.FileName), HeadModel);
 
-    SourceSame = bst_process('CallProcess', 'process_inverse_2018', RawFileHead, [], ...
+    SourcePerm = bst_process('CallProcess', 'process_inverse_2018', RawFileHead, [], ...
     'output',  2, ...  % Kernel only: one per file
     'inverse', struct(...
-         'Comment',        'dSPM: MEG same head', ...
+         'Comment',        'dSPM: MEG random head', ...
          'InverseMethod',  'minnorm', ...
          'InverseMeasure', 'dspm2018', ...
          'SourceOrient',   {{'fixed'}}, ...
@@ -146,6 +154,7 @@ for iSubj=1:nSubjects
 
 
 end;
+
 
 %% ===== BRAIN-FINGERPRINT PARAMETERS =====
 % Subjects
@@ -177,9 +186,6 @@ if ~all(ismember(SubjectNames, ProtocolSubjectNames))
     error(['All requested subjects must be present in the ' ProtocolNameOmega ' protocol.']);
 end
 
-% update subject names to exclude from the next part the reference Subject.
-SubjectNames = setdiff(SubjectNames, SubjectNames{refSubj});
-nSubjects = length(SubjectNames);
 
 %% ===== FIND FILES =====
 bst_report('Start');
@@ -203,7 +209,7 @@ for iSubject = 1 : nSubjects
     sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], ...
         'subjectname',   SubjectNames{iSubject}, ...
         'condition',     '', ...
-        'tag',           'same head', ...
+        'tag',           'random head', ...
         'includebad',    0, ...
         'includeintra',  0, ...
         'includecommon', 0);
@@ -213,7 +219,7 @@ end
 
 %% Compute PSD for all ROIs of an atlas
 % For each subject, their recordings are split in two parts (data segments)
-% these two data segments will be used to create PSDs
+% these two data segments will be used to create the PSDs
 % These two PSDs are the features that will define the brain-fingerprint
 
 nSegments = 2; % Training and Validation
@@ -329,7 +335,7 @@ sNormSubj = bst_get('NormalizedSubject');
 sSimilarityMat = db_template('timefreqmat');
 % Reshape: [nA x nB x nTime x nFreq] => [nA*nB x nTime x nFreq]
 sSimilarityMat.TF = reshape(SubjectCorrMatrix, [], 1, 1);
-sSimilarityMat.Comment      = 'Similarity matrix samehead';
+sSimilarityMat.Comment      = 'Similarity matrix randomhead';
 sSimilarityMat.DataType     = 'matrix';
 sSimilarityMat.Time     = [0, 1];
 sSimilarityMat.RefRowNames = cellfun(@(x) ['Train ', x], SubjectNames, 'UniformOutput', false);
@@ -344,7 +350,7 @@ db_add_data(iOutputStudy, SimilarityFile, sSimilarityMat);
 % Differentiability matrix
 sDiffMat = db_template('matrixmat');
 sDiffMat.Value   = Differentiability;
-sDiffMat.Comment = 'Differentiability samehead';
+sDiffMat.Comment = 'Differentiability randomhead';
 sDiffMat.Time     = [0, 1];
 sDiffMat.Description = SubjectNames;
 % Output filename
@@ -358,7 +364,7 @@ db_add_data(iOutputStudy, DiffFile, sDiffMat);
 for iBand = 1 : nBands
     sIccBandMat = db_template('matrixmat');
     sIccBandMat.Value   = iccBands(:, iBand);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_samehead'];
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_randomhead'];
     sIccBandMat.Time    = [0, 1];
     sIccBandMat.Description = ScoutNames;
     % Output filename
@@ -388,7 +394,7 @@ for iBand = 1 : nBands
     sIccBandMat = db_template('resultsmat');
     sIccBandMat.SurfaceFile = sSurfFile.FileName;
     sIccBandMat.ImageGridAmp = nan(size(sSurfMat.Vertices, 1), 1);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_samehead']; %added same head comment
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_randomhead']; %added random head comment
     sIccBandMat.Time    = [0, 1];
     % Assign ICC values to vertices in Scout
     for ix = 1 : nScouts
@@ -412,13 +418,13 @@ db_reload_studies(iOutputStudy)
 % Process: Snapshot: Similarity matrix
 bst_process('CallProcess', 'process_snapshot', SimilarityFile, [], ...
     'type',    'connectimage', ...  % Connectivity matrix
-    'Comment', 'Similarity matrix samehead');
+    'Comment', 'Similarity matrix randomhead');
 
 % Process: Snapshot: Recordings time series
 bst_process('CallProcess', 'process_snapshot', DiffFile, [], ...
     'type',           'data', ...  % Recordings time series
     'time',           0, ...
-    'Comment',        'Differentiability samehead');
+    'Comment',        'Differentiability randomhead');
 
 for iBand = 1 : nBands
     % Process: Snapshot: Sources (one time)
@@ -431,7 +437,7 @@ for iBand = 1 : nBands
         'threshold',      0, ...
         'surfsmooth',     30, ...
         'mni',            [0, 0, 0], ...
-        'Comment',        ['ICC_' BandNames{iBand}, '_samehead']);
+        'Comment',        ['ICC_' BandNames{iBand}, '_randomhead']);
 end
 
 % Save report
