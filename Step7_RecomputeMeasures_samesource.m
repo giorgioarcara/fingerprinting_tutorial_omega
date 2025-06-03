@@ -13,6 +13,7 @@ SubjectNames = {'sub-0002', 'sub-0003', 'sub-0004', 'sub-0006', 'sub-0007'};
 nSubjects = length(SubjectNames);
 tag = 'allFreqs'; % 
 reports_dir = [];
+refSubject = 1
 
 
 
