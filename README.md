@@ -1,7 +1,7 @@
 # fingerprinting_tutorial_omega
 
 These scripts accompany the article "The influence of the head model on magnetoencephalography-derived functional connectivity fingerprinting", by Matthias Schelfhout, Thomas Hinault, Sara Lago, Giorgio Arcara, Enrico Amico, Matteo Fraschini, and Daniele Marinazzo.
-
+Note that scripts are changed so that only Theta band is included.
 
 files are meant to be used as follow
 

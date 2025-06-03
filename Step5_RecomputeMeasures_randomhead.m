@@ -1,166 +1,34 @@
-function tutorial_brain_fingerprint_samehead(ProtocolNameOmega, reports_dir)
-% TUTORIAL_BRAIN_FINGERPRINT: Script that reproduces the results of the online tutorial "Brain-fingerprint".
-%
-% CORRESPONDING ONLINE TUTORIAL:
-%     https://neuroimage.usc.edu/brainstorm/Tutorials/BrainFingerprint
-%
-% INPUTS:
-%    - ProtocolNameOmega : Name of the protocol created with all the data imported (TutorialOmega)
-%    - reports_dir       : Directory where to save the execution report (instead of displaying it)
-%
-% @=============================================================================
-% This function is part of the Brainstorm software:
-% https://neuroimage.usc.edu/brainstorm
-%
-% Copyright (c) University of Southern California & McGill University
-% This software is distributed under the terms of the GNU General Public License
-% as published by the Free Software Foundation. Further details on the GPLv3
-% license can be found at http://www.gnu.org/copyleft/gpl.html.
-%
-% FOR RESEARCH PURPOSES ONLY. THE SOFTWARE IS PROVIDED "AS IS," AND THE
-% UNIVERSITY OF SOUTHERN CALIFORNIA AND ITS COLLABORATORS DO NOT MAKE ANY
-% WARRANTY, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF
-% MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, NOR DO THEY ASSUME ANY
-% LIABILITY OR RESPONSIBILITY FOR THE USE OF THIS SOFTWARE.
-%
-% For more information type "brainstorm license" at command prompt.
-% =============================================================================@
-%
-% Authors of original tutorial: Jason da Silva Castanheira, Raymundo Cassani, 2024
-% Authors of modifications: Giorgio Arcara, Sara Lago, Daniele Marinazzo,
-% 2024
+%% RECOMPUTE MEASURES FOR RANDOMHEAD
+% this script recompute measures for random head without relaunching
+% sources.
+% the current scripts reuse most of the script in
+% Step2_tutorial_fingerprint_randomhead with the following modifications:
+% - in the loop to select Raw file (see ADDED SELECTION HERE, comment) a
+% further selection is made.
+% - all comments are modified with the "tag", specified below:
+% (search ".Comment" in search to locate this).
 
-%% ===== CHECK PROTOCOL =====
-% Start brainstorm without the GUI
-if ~brainstorm('status')
-    brainstorm nogui
-end
-% Output folder for reports
-if (nargin < 2) || isempty(reports_dir) || ~isdir(reports_dir)
-    reports_dir = [];
-end
-% You have to specify the folder in which the tutorial dataset is unzipped
-if (nargin < 1) || isempty(ProtocolNameOmega)
-    ProtocolNameOmega = 'TutorialOmega';
-end
-
-
-%% ===== REPLACE HEAD MODEL WITH SAME HEAD MODEL =====
-% Subjects
+ProtocolNameOmega = "TutorialOmega";
 SubjectNames = {'sub-0002', 'sub-0003', 'sub-0004', 'sub-0006', 'sub-0007'};
 nSubjects = length(SubjectNames);
+tag = 'allFreqs'; % 
+reports_dir = [];
 
-% Process: Select data files in: */
-
-% create new head model (to avoid modify the original ones of the OMEGA
-% tutorial). The Brainstorm head model file will be used as template in
-% which the Gain Matrix will be substituted with that of a Reference
-% Subject that will be the Same for all Subjects.
-
-for iSubj=1:nSubjects
-
-    RawFile = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{iSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    % Process: Compute head model
-    RawFileHead = bst_process('CallProcess', 'process_headmodel', RawFile, [], ...
-        'Comment',     'Overlapping spheres same head', ...
-        'sourcespace', 1, ...  % Cortex surface
-        'meg',         3, ...  % Overlapping spheres
-        'eeg',         3, ...  % OpenMEEG BEM
-        'ecog',        2, ...  % OpenMEEG BEM
-        'seeg',        2, ...  % OpenMEEG BEM
-        'openmeeg',    struct(...
-        'BemFiles',     {{}}, ...
-        'BemNames',     {{'Scalp', 'Skull', 'Brain'}}, ...
-        'BemCond',      [1, 0.0125, 1], ...
-        'BemSelect',    [1, 1, 1], ...
-        'isAdjoint',    0, ...
-        'isAdaptative', 1, ...
-        'isSplit',      0, ...
-        'SplitLength',  4000), ...
-        'channelfile', '');
-end;
-
-% define the index of the reference Subject, whose head model will be used for all
-% Subjects
-refSubj = 1;
-
-% the head model of the i-th Subject in SubjectNames, will be substituted
-% with the head model of the reference Subject
-
-for iSubj=1:nSubjects
-
-    RawFileHead = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{iSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    RawFileHeadSame = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{refSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    HeadModelFile = bst_get('HeadModelForStudy',   RawFileHead.iStudy);
-    HeadModel=in_bst_headmodel(HeadModelFile.FileName);
-
-
-    HeadModelFileSame = bst_get('HeadModelForStudy',   RawFileHeadSame.iStudy);
-    HeadModelSame=in_bst_headmodel(HeadModelFileSame.FileName);
-
-    % in the line below the Gain of the Head model is changed with that of
-    % the reference Subject.
-    HeadModel.Gain = HeadModelSame.Gain;
-    HeadModel.SubjSame = SubjectNames{refSubj};
-    bst_save(file_fullpath(HeadModelFile.FileName), HeadModel);
-
-    SourceSame = bst_process('CallProcess', 'process_inverse_2018', RawFileHead, [], ...
-    'output',  2, ...  % Kernel only: one per file
-    'inverse', struct(...
-         'Comment',        'dSPM: MEG same head', ...
-         'InverseMethod',  'minnorm', ...
-         'InverseMeasure', 'dspm2018', ...
-         'SourceOrient',   {{'fixed'}}, ...
-         'Loose',          0.2, ...
-         'UseDepth',       1, ...
-         'WeightExp',      0.5, ...
-         'WeightLimit',    10, ...
-         'NoiseMethod',    'reg', ...
-         'NoiseReg',       0.1, ...
-         'SnrMethod',      'fixed', ...
-         'SnrRms',         1e-06, ...
-         'SnrFixed',       3, ...
-         'ComputeKernel',  1, ...
-         'DataTypes',      {{'MEG'}}));
-
-
-end;
+%fq_tot = [0.5,4,8,13,30; 4,8,13,30,48];
 
 %% ===== BRAIN-FINGERPRINT PARAMETERS =====
 % Subjects
 % Frequency range
-LowerFreq =   4; % Hz, inclusive
-UpperFreq = 8; % 150; % Hz, exclusive
+LowerFreq =   0.5; % Hz, inclusive
+UpperFreq = 50; % 150; % Hz, exclusive
 % Cortical parcellation (atlas)
 % Note that we downsample the cortical surface using an atlas for computation efficiency
 AtlasName = 'Destrieux';
 AtlasScouts = {'G_Ins_lg_and_S_cent_ins L', 'G_Ins_lg_and_S_cent_ins R', 'G_and_S_cingul-Ant L', 'G_and_S_cingul-Ant R', 'G_and_S_cingul-Mid-Ant L', 'G_and_S_cingul-Mid-Ant R', 'G_and_S_cingul-Mid-Post L', 'G_and_S_cingul-Mid-Post R', 'G_and_S_frontomargin L', 'G_and_S_frontomargin R', 'G_and_S_occipital_inf L', 'G_and_S_occipital_inf R', 'G_and_S_paracentral L', 'G_and_S_paracentral R', 'G_and_S_subcentral L', 'G_and_S_subcentral R', 'G_and_S_transv_frontopol L', 'G_and_S_transv_frontopol R', 'G_cingul-Post-dorsal L', 'G_cingul-Post-dorsal R', 'G_cingul-Post-ventral L', 'G_cingul-Post-ventral R', 'G_cuneus L', 'G_cuneus R', 'G_front_inf-Opercular L', 'G_front_inf-Opercular R', 'G_front_inf-Orbital L', 'G_front_inf-Orbital R', 'G_front_inf-Triangul L', 'G_front_inf-Triangul R', 'G_front_middle L', 'G_front_middle R', 'G_front_sup L', 'G_front_sup R', 'G_insular_short L', 'G_insular_short R', 'G_oc-temp_lat-fusifor L', 'G_oc-temp_lat-fusifor R', 'G_oc-temp_med-Lingual L', 'G_oc-temp_med-Lingual R', 'G_oc-temp_med-Parahip L', 'G_oc-temp_med-Parahip R', 'G_occipital_middle L', 'G_occipital_middle R', 'G_occipital_sup L', 'G_occipital_sup R', 'G_orbital L', 'G_orbital R', 'G_pariet_inf-Angular L', 'G_pariet_inf-Angular R', 'G_pariet_inf-Supramar L', 'G_pariet_inf-Supramar R', 'G_parietal_sup L', 'G_parietal_sup R', 'G_postcentral L', 'G_postcentral R', 'G_precentral L', 'G_precentral R', 'G_precuneus L', 'G_precuneus R', 'G_rectus L', 'G_rectus R', 'G_subcallosal L', 'G_subcallosal R', 'G_temp_sup-G_T_transv L', 'G_temp_sup-G_T_transv R', 'G_temp_sup-Lateral L', 'G_temp_sup-Lateral R', 'G_temp_sup-Plan_polar L', 'G_temp_sup-Plan_polar R', 'G_temp_sup-Plan_tempo L', 'G_temp_sup-Plan_tempo R', 'G_temporal_inf L', 'G_temporal_inf R', 'G_temporal_middle L', 'G_temporal_middle R', 'Lat_Fis-ant-Horizont L', 'Lat_Fis-ant-Horizont R', 'Lat_Fis-ant-Vertical L', 'Lat_Fis-ant-Vertical R', 'Lat_Fis-post L', 'Lat_Fis-post R', 'Pole_occipital L', 'Pole_occipital R', 'Pole_temporal L', 'Pole_temporal R', 'S_calcarine L', 'S_calcarine R', 'S_central L', 'S_central R', 'S_cingul-Marginalis L', 'S_cingul-Marginalis R', 'S_circular_insula_ant L', 'S_circular_insula_ant R', 'S_circular_insula_inf L', 'S_circular_insula_inf R', 'S_circular_insula_sup L', 'S_circular_insula_sup R', 'S_collat_transv_ant L', 'S_collat_transv_ant R', 'S_collat_transv_post L', 'S_collat_transv_post R', 'S_front_inf L', 'S_front_inf R', 'S_front_middle L', 'S_front_middle R', 'S_front_sup L', 'S_front_sup R', 'S_interm_prim-Jensen L', 'S_interm_prim-Jensen R', 'S_intrapariet_and_P_trans L', 'S_intrapariet_and_P_trans R', 'S_oc-temp_lat L', 'S_oc-temp_lat R', 'S_oc-temp_med_and_Lingual L', 'S_oc-temp_med_and_Lingual R', 'S_oc_middle_and_Lunatus L', 'S_oc_middle_and_Lunatus R', 'S_oc_sup_and_transversal L', 'S_oc_sup_and_transversal R', 'S_occipital_ant L', 'S_occipital_ant R', 'S_orbital-H_Shaped L', 'S_orbital-H_Shaped R', 'S_orbital_lateral L', 'S_orbital_lateral R', 'S_orbital_med-olfact L', 'S_orbital_med-olfact R', 'S_parieto_occipital L', 'S_parieto_occipital R', 'S_pericallosal L', 'S_pericallosal R', 'S_postcentral L', 'S_postcentral R', 'S_precentral-inf-part L', 'S_precentral-inf-part R', 'S_precentral-sup-part L', 'S_precentral-sup-part R', 'S_suborbital L', 'S_suborbital R', 'S_subparietal L', 'S_subparietal R', 'S_temporal_inf L', 'S_temporal_inf R', 'S_temporal_sup L', 'S_temporal_sup R', 'S_temporal_transverse L', 'S_temporal_transverse R'};
 % Bands for ICC cortex plot
 BandNames = {'theta'}; % , 'alpha', 'beta', 'gamma', 'highgamma'};
-BandLowerFreqs = [ 4 ];%,  8, 13, 30,  50]; % Hz, inclusive
-BandUpperFreqs = [ 8]; %, 13, 30, 50, 150]; % Hz, exclusive
-
+BandLowerFreqs = [ 0.5, 4, 8, 13, 30]; % Hz, inclusive
+BandUpperFreqs = [ 4, 8, 13, 30, 48]; % Hz, exclusive
 
 %% ===== VERIFY REQUIRED PROTOCOL =====
 % Check existing Protocol 
@@ -178,9 +46,6 @@ if ~all(ismember(SubjectNames, ProtocolSubjectNames))
     error(['All requested subjects must be present in the ' ProtocolNameOmega ' protocol.']);
 end
 
-% update subject names to exclude from the next part the reference Subject.
-SubjectNames = setdiff(SubjectNames, SubjectNames{refSubj});
-nSubjects = length(SubjectNames);
 
 %% ===== FIND FILES =====
 bst_report('Start');
@@ -199,12 +64,20 @@ for iSubject = 1 : nSubjects
         'includeintra',  0, ...
         'includecommon', 0);
     sRawDataFiles = [sRawDataFiles, sFiles];
+    
+    % ADDED SELECTION HERE:
+    % exclude files with "resample" (imported files for samesource
+    % condition)
+    RawNames = {sRawDataFiles.FileName};
+    SelString=regexpi(RawNames, 'resample'); %
+    SelString_ind=find(cellfun(@isempty, SelString)); % exclude files that include "resample" in the Filename
+    sRawDataFiles = sRawDataFiles(SelString_ind);
 
     % Process: Select results files in: sub-000*/*
     sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], ...
         'subjectname',   SubjectNames{iSubject}, ...
         'condition',     '', ...
-        'tag',           'same head', ...
+        'tag',           'random head', ...
         'includebad',    0, ...
         'includeintra',  0, ...
         'includecommon', 0);
@@ -214,7 +87,7 @@ end
 
 %% Compute PSD for all ROIs of an atlas
 % For each subject, their recordings are split in two parts (data segments)
-% these two data segments will be used to create PSDs
+% these two data segments will be used to create the PSDs
 % These two PSDs are the features that will define the brain-fingerprint
 
 nSegments = 2; % Training and Validation
@@ -330,7 +203,7 @@ sNormSubj = bst_get('NormalizedSubject');
 sSimilarityMat = db_template('timefreqmat');
 % Reshape: [nA x nB x nTime x nFreq] => [nA*nB x nTime x nFreq]
 sSimilarityMat.TF = reshape(SubjectCorrMatrix, [], 1, 1);
-sSimilarityMat.Comment      = 'Similarity matrix samehead';
+sSimilarityMat.Comment      = ['Similarity matrix randomhead',' ', tag];
 sSimilarityMat.DataType     = 'matrix';
 sSimilarityMat.Time     = [0, 1];
 sSimilarityMat.RefRowNames = cellfun(@(x) ['Train ', x], SubjectNames, 'UniformOutput', false);
@@ -345,7 +218,7 @@ db_add_data(iOutputStudy, SimilarityFile, sSimilarityMat);
 % Differentiability matrix
 sDiffMat = db_template('matrixmat');
 sDiffMat.Value   = Differentiability;
-sDiffMat.Comment = 'Differentiability samehead';
+sDiffMat.Comment = ['Differentiability randomhead', tag];
 sDiffMat.Time     = [0, 1];
 sDiffMat.Description = SubjectNames;
 % Output filename
@@ -359,7 +232,7 @@ db_add_data(iOutputStudy, DiffFile, sDiffMat);
 for iBand = 1 : nBands
     sIccBandMat = db_template('matrixmat');
     sIccBandMat.Value   = iccBands(:, iBand);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_samehead'];
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_randomhead','_', tag];
     sIccBandMat.Time    = [0, 1];
     sIccBandMat.Description = ScoutNames;
     % Output filename
@@ -389,7 +262,7 @@ for iBand = 1 : nBands
     sIccBandMat = db_template('resultsmat');
     sIccBandMat.SurfaceFile = sSurfFile.FileName;
     sIccBandMat.ImageGridAmp = nan(size(sSurfMat.Vertices, 1), 1);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_samehead']; %added same head comment
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_randomhead', '_', tag]; %added random head comment
     sIccBandMat.Time    = [0, 1];
     % Assign ICC values to vertices in Scout
     for ix = 1 : nScouts
@@ -413,13 +286,13 @@ db_reload_studies(iOutputStudy)
 % Process: Snapshot: Similarity matrix
 bst_process('CallProcess', 'process_snapshot', SimilarityFile, [], ...
     'type',    'connectimage', ...  % Connectivity matrix
-    'Comment', 'Similarity matrix samehead');
+    'Comment', 'Similarity matrix randomhead');
 
 % Process: Snapshot: Recordings time series
 bst_process('CallProcess', 'process_snapshot', DiffFile, [], ...
     'type',           'data', ...  % Recordings time series
     'time',           0, ...
-    'Comment',        'Differentiability samehead');
+    'Comment',        'Differentiability randomhead');
 
 for iBand = 1 : nBands
     % Process: Snapshot: Sources (one time)
@@ -432,7 +305,7 @@ for iBand = 1 : nBands
         'threshold',      0, ...
         'surfsmooth',     30, ...
         'mni',            [0, 0, 0], ...
-        'Comment',        ['ICC_' BandNames{iBand}, '_samehead']);
+        'Comment',        ['ICC_' BandNames{iBand}, '_randomhead']);
 end
 
 % Save report

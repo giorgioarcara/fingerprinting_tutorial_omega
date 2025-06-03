@@ -1,151 +1,20 @@
-function tutorial_brain_fingerprint_samehead(ProtocolNameOmega, reports_dir)
-% TUTORIAL_BRAIN_FINGERPRINT: Script that reproduces the results of the online tutorial "Brain-fingerprint".
-%
-% CORRESPONDING ONLINE TUTORIAL:
-%     https://neuroimage.usc.edu/brainstorm/Tutorials/BrainFingerprint
-%
-% INPUTS:
-%    - ProtocolNameOmega : Name of the protocol created with all the data imported (TutorialOmega)
-%    - reports_dir       : Directory where to save the execution report (instead of displaying it)
-%
-% @=============================================================================
-% This function is part of the Brainstorm software:
-% https://neuroimage.usc.edu/brainstorm
-%
-% Copyright (c) University of Southern California & McGill University
-% This software is distributed under the terms of the GNU General Public License
-% as published by the Free Software Foundation. Further details on the GPLv3
-% license can be found at http://www.gnu.org/copyleft/gpl.html.
-%
-% FOR RESEARCH PURPOSES ONLY. THE SOFTWARE IS PROVIDED "AS IS," AND THE
-% UNIVERSITY OF SOUTHERN CALIFORNIA AND ITS COLLABORATORS DO NOT MAKE ANY
-% WARRANTY, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF
-% MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE, NOR DO THEY ASSUME ANY
-% LIABILITY OR RESPONSIBILITY FOR THE USE OF THIS SOFTWARE.
-%
-% For more information type "brainstorm license" at command prompt.
-% =============================================================================@
-%
-% Authors of original tutorial: Jason da Silva Castanheira, Raymundo Cassani, 2024
-% Authors of modifications: Giorgio Arcara, Sara Lago, Daniele Marinazzo,
-% 2024
+%% RECOMPUTE MEASURES FOR SAMESOURCE
+% this script recompute measures for random head without relaunching
+% sources.
+% the current scripts reuse most of the script in
+% Step2_tutorial_fingerprint_randomhead with the following modifications:
+% - in the loop to select Raw file (see ADDED SELECTION HERE, comment) a
+% further selection is made.
+% - all comments are modified with the "tag", specified below:
+% (search ".Comment" in search to locate this).
 
-%% ===== CHECK PROTOCOL =====
-% Start brainstorm without the GUI
-if ~brainstorm('status')
-    brainstorm nogui
-end
-% Output folder for reports
-if (nargin < 2) || isempty(reports_dir) || ~isdir(reports_dir)
-    reports_dir = [];
-end
-% You have to specify the folder in which the tutorial dataset is unzipped
-if (nargin < 1) || isempty(ProtocolNameOmega)
-    ProtocolNameOmega = 'TutorialOmega';
-end
-
-
-%% ===== REPLACE HEAD MODEL WITH SAME HEAD MODEL =====
-% Subjects
+ProtocolNameOmega = "TutorialOmega";
 SubjectNames = {'sub-0002', 'sub-0003', 'sub-0004', 'sub-0006', 'sub-0007'};
 nSubjects = length(SubjectNames);
-
-% Process: Select data files in: */
-
-% create new head model (to avoid modify the original ones of the OMEGA
-% tutorial). The Brainstorm head model file will be used as template in
-% which the Gain Matrix will be substituted with that of a Reference
-% Subject that will be the Same for all Subjects.
-
-for iSubj=1:nSubjects
-
-    RawFile = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{iSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    % Process: Compute head model
-    RawFileHead = bst_process('CallProcess', 'process_headmodel', RawFile, [], ...
-        'Comment',     'Overlapping spheres same head', ...
-        'sourcespace', 1, ...  % Cortex surface
-        'meg',         3, ...  % Overlapping spheres
-        'eeg',         3, ...  % OpenMEEG BEM
-        'ecog',        2, ...  % OpenMEEG BEM
-        'seeg',        2, ...  % OpenMEEG BEM
-        'openmeeg',    struct(...
-        'BemFiles',     {{}}, ...
-        'BemNames',     {{'Scalp', 'Skull', 'Brain'}}, ...
-        'BemCond',      [1, 0.0125, 1], ...
-        'BemSelect',    [1, 1, 1], ...
-        'isAdjoint',    0, ...
-        'isAdaptative', 1, ...
-        'isSplit',      0, ...
-        'SplitLength',  4000), ...
-        'channelfile', '');
-end;
-
-% define the index of the reference Subject, whose head model will be used for all
-% Subjects
-refSubj = 1;
-
-% the head model of the i-th Subject in SubjectNames, will be substituted
-% with the head model of the reference Subject
-
-for iSubj=1:nSubjects
-
-    RawFileHead = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{iSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    RawFileHeadSame = bst_process('CallProcess', 'process_select_files_data', [], [], ...
-        'subjectname',   SubjectNames{refSubj}, ...
-        'condition',     '', ...
-        'tag',           '', ...
-        'includebad',    0, ...
-        'includeintra',  0, ...
-        'includecommon', 0);
-
-    HeadModelFile = bst_get('HeadModelForStudy',   RawFileHead.iStudy);
-    HeadModel=in_bst_headmodel(HeadModelFile.FileName);
+tag = 'allFreqs'; % 
+reports_dir = [];
 
 
-    HeadModelFileSame = bst_get('HeadModelForStudy',   RawFileHeadSame.iStudy);
-    HeadModelSame=in_bst_headmodel(HeadModelFileSame.FileName);
-
-    % in the line below the Gain of the Head model is changed with that of
-    % the reference Subject.
-    HeadModel.Gain = HeadModelSame.Gain;
-    HeadModel.SubjSame = SubjectNames{refSubj};
-    bst_save(file_fullpath(HeadModelFile.FileName), HeadModel);
-
-    SourceSame = bst_process('CallProcess', 'process_inverse_2018', RawFileHead, [], ...
-    'output',  2, ...  % Kernel only: one per file
-    'inverse', struct(...
-         'Comment',        'dSPM: MEG same head', ...
-         'InverseMethod',  'minnorm', ...
-         'InverseMeasure', 'dspm2018', ...
-         'SourceOrient',   {{'fixed'}}, ...
-         'Loose',          0.2, ...
-         'UseDepth',       1, ...
-         'WeightExp',      0.5, ...
-         'WeightLimit',    10, ...
-         'NoiseMethod',    'reg', ...
-         'NoiseReg',       0.1, ...
-         'SnrMethod',      'fixed', ...
-         'SnrRms',         1e-06, ...
-         'SnrFixed',       3, ...
-         'ComputeKernel',  1, ...
-         'DataTypes',      {{'MEG'}}));
-
-
-end;
 
 %% ===== BRAIN-FINGERPRINT PARAMETERS =====
 % Subjects
@@ -160,7 +29,6 @@ AtlasScouts = {'G_Ins_lg_and_S_cent_ins L', 'G_Ins_lg_and_S_cent_ins R', 'G_and_
 BandNames = {'theta'}; % , 'alpha', 'beta', 'gamma', 'highgamma'};
 BandLowerFreqs = [ 4 ];%,  8, 13, 30,  50]; % Hz, inclusive
 BandUpperFreqs = [ 8]; %, 13, 30, 50, 150]; % Hz, exclusive
-
 
 %% ===== VERIFY REQUIRED PROTOCOL =====
 % Check existing Protocol 
@@ -179,8 +47,9 @@ if ~all(ismember(SubjectNames, ProtocolSubjectNames))
 end
 
 % update subject names to exclude from the next part the reference Subject.
-SubjectNames = setdiff(SubjectNames, SubjectNames{refSubj});
+SubjectNames = setdiff(SubjectNames, SubjectNames{refSubject});
 nSubjects = length(SubjectNames);
+
 
 %% ===== FIND FILES =====
 bst_report('Start');
@@ -189,22 +58,35 @@ bst_report('Start');
 sRawDataFiles = [];
 sSourcesFiles = [];
 
-for iSubject = 1 : nSubjects
+for iSubject = 1 : length(SubjectNames)
     % Process: Select data files in: sub-000*/*
-    sFiles = bst_process('CallProcess', 'process_select_files_data', [], [], ...
+    RawFile = bst_process('CallProcess', 'process_select_files_data', [], [], ...
         'subjectname',   SubjectNames{iSubject}, ...
         'condition',     '', ...
         'tag',           '', ...
         'includebad',    0, ...
         'includeintra',  0, ...
         'includecommon', 0);
-    sRawDataFiles = [sRawDataFiles, sFiles];
+
+    % note I select only the file including resample in the name because
+    % they are the only one that are related to samesource (the only
+    % imported data).
+    StudiesInd = {RawFile.iStudy};
+    RawNames = {RawFile.FileName};
+    SelString=regexpi(RawNames, 'resample'); %
+    SelString_ind=find(~cellfun(@isempty, SelString));
+
+    SelRawFile = RawFile(SelString_ind);
+
+   sRawDataFiles = [sRawDataFiles, SelRawFile];
+
 
     % Process: Select results files in: sub-000*/*
+    % (Note: to select the correct source I use the tag below, which is the "(New)" in kernel file, see BST Protocol for Details)
     sFiles = bst_process('CallProcess', 'process_select_files_results', [], [], ...
         'subjectname',   SubjectNames{iSubject}, ...
         'condition',     '', ...
-        'tag',           'same head', ...
+        'tag',           '(New)', ...
         'includebad',    0, ...
         'includeintra',  0, ...
         'includecommon', 0);
@@ -223,13 +105,13 @@ timeFin   = zeros(nSubjects, nSegments);
 sPsdFiles = repmat(db_template('processfile'), nSubjects, nSegments);
 for iSubject = 1 : nSubjects
     sData = load(file_fullpath(sRawDataFiles(iSubject).FileName), 'Time');
-    halfTime = diff(sData.Time) / 2;
+    halfTime = sData.Time(round(length(sData.Time)/2)); % Note GA: fixed to work with Imported data
     % First segment
     timeIni(iSubject, 1) = sData.Time(1) + 30;
     timeFin(iSubject, 1) = halfTime      - 30;
     % Second segment
     timeIni(iSubject, 2) = halfTime      + 30;
-    timeFin(iSubject, 2) = sData.Time(2) - 30;
+    timeFin(iSubject, 2) = sData.Time(end) - 30; % Note GA: fixed to work with Imported data
     % Compute PSD
     for iSegment = 1 : size(timeIni, 2)
         % Process: Power spectrum density (Welch)
@@ -255,7 +137,7 @@ end
 
 %% ===== VECTORIZE PSD DATA FOR FINGERPRINTING =====
 % Find size of requested PSD data
-sPsdMat = in_bst_timefreq(sPsdFiles(1,1).FileName, 0, 'RowNames', 'Freqs'); 
+sPsdMat = in_bst_timefreq(sPsdFiles(1,1).FileName, 0, 'RowNames', 'Freqs');
 Freqs = sPsdMat.Freqs;
 ixLowerFreq = find(Freqs >= LowerFreq, 1, 'first');
 ixUpperFreq = find(Freqs <  UpperFreq, 1, 'last');
@@ -310,7 +192,7 @@ for iFeature = 1 : nFeatures
     ms_w = ss_w / df_w;
     icc(iFeature) = (ms_b - ms_w) ./ (ms_b + ((nSegments-1).*ms_w));
 end
-iccFreqsScouts = reshape(icc, [nFreqs, nScouts]); 
+iccFreqsScouts = reshape(icc, [nFreqs, nScouts]);
 % Compute Scout ICC for frequency bands
 nBands = length(BandNames);
 iccBands = zeros(nScouts, nBands);
@@ -330,7 +212,7 @@ sNormSubj = bst_get('NormalizedSubject');
 sSimilarityMat = db_template('timefreqmat');
 % Reshape: [nA x nB x nTime x nFreq] => [nA*nB x nTime x nFreq]
 sSimilarityMat.TF = reshape(SubjectCorrMatrix, [], 1, 1);
-sSimilarityMat.Comment      = 'Similarity matrix samehead';
+sSimilarityMat.Comment      = ['Similarity matrix samesource', ' ', tag];
 sSimilarityMat.DataType     = 'matrix';
 sSimilarityMat.Time     = [0, 1];
 sSimilarityMat.RefRowNames = cellfun(@(x) ['Train ', x], SubjectNames, 'UniformOutput', false);
@@ -345,7 +227,7 @@ db_add_data(iOutputStudy, SimilarityFile, sSimilarityMat);
 % Differentiability matrix
 sDiffMat = db_template('matrixmat');
 sDiffMat.Value   = Differentiability;
-sDiffMat.Comment = 'Differentiability samehead';
+sDiffMat.Comment = ['Differentiability samesource', ' ', tag];
 sDiffMat.Time     = [0, 1];
 sDiffMat.Description = SubjectNames;
 % Output filename
@@ -359,7 +241,7 @@ db_add_data(iOutputStudy, DiffFile, sDiffMat);
 for iBand = 1 : nBands
     sIccBandMat = db_template('matrixmat');
     sIccBandMat.Value   = iccBands(:, iBand);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_samehead'];
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand}, '_samesource', '_', tag];
     sIccBandMat.Time    = [0, 1];
     sIccBandMat.Description = ScoutNames;
     % Output filename
@@ -389,7 +271,7 @@ for iBand = 1 : nBands
     sIccBandMat = db_template('resultsmat');
     sIccBandMat.SurfaceFile = sSurfFile.FileName;
     sIccBandMat.ImageGridAmp = nan(size(sSurfMat.Vertices, 1), 1);
-    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_samehead']; %added same head comment
+    sIccBandMat.Comment = ['ICC_' BandNames{iBand} '_samesource', '_', tag]; %added same head comment
     sIccBandMat.Time    = [0, 1];
     % Assign ICC values to vertices in Scout
     for ix = 1 : nScouts
@@ -413,13 +295,13 @@ db_reload_studies(iOutputStudy)
 % Process: Snapshot: Similarity matrix
 bst_process('CallProcess', 'process_snapshot', SimilarityFile, [], ...
     'type',    'connectimage', ...  % Connectivity matrix
-    'Comment', 'Similarity matrix samehead');
+    'Comment', 'Similarity matrix samesource');
 
 % Process: Snapshot: Recordings time series
 bst_process('CallProcess', 'process_snapshot', DiffFile, [], ...
     'type',           'data', ...  % Recordings time series
     'time',           0, ...
-    'Comment',        'Differentiability samehead');
+    'Comment',        'Differentiability samesource');
 
 for iBand = 1 : nBands
     % Process: Snapshot: Sources (one time)
@@ -432,7 +314,7 @@ for iBand = 1 : nBands
         'threshold',      0, ...
         'surfsmooth',     30, ...
         'mni',            [0, 0, 0], ...
-        'Comment',        ['ICC_' BandNames{iBand}, '_samehead']);
+        'Comment',        ['ICC_' BandNames{iBand}, '_samesource']);
 end
 
 % Save report
